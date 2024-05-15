@@ -6840,10 +6840,30 @@ inline Kernel::Kernel(const Program& program, const char* name, cl_int* err)
     // https://community.intel.com/t5/GPU-Compute-Software/OpenCL-CL-INVALID-KERNEL-ARGS-with-driver-gt-30-0-101-1340/td-p/1420021
     if (error == CL_INVALID_KERNEL_NAME) {
         const auto      names = program.getInfo<CL_PROGRAM_KERNEL_NAMES>();
-        const string    pattern = string(name) + ".";
-        const auto      start = names.find(pattern);
+        const string    pattern = string(";") + string(name) + ".";
+    
+        // Consider the kernels: FooBar, Foo, and Bar.
+        // In the buggy Intel releases CL_PROGRAM_KERNEL_NAMES will return: "FooBar.1;Foo.2;Bar.3"
+        // Lets say we want to get the translated name of "Foo". The first occurance of "Foo." would find the substring of "FooBar.1",
+        // so we'd try to load "Bar.1". But that doesn't exist!
+        // So we need to check for if the requested kernel name is first. Otherwise need to search for ";Foo.".
+        const auto      start = [&]() -> string::size_type
+            {
+                if (names.starts_with(std::string_view(pattern.begin() + 1, pattern.end())))
+                {
+                    return 0;
+                }
+                else
+                {
+                    const auto pos = names.find(pattern);
+                    return pos == string::npos
+                        ? string::npos
+                        : pos + 1;  // Skip the semicolon. Just like the above case.
+                }
+            }();
+    
         if (start != string::npos) {
-            const auto      end = names.find(';', start + pattern.length());
+            const auto      end = names.find(';', start + pattern.length() - 1);    // Subtract the semicolon. 'start' is already one index past it.
             const string    fixedName = names.substr(start, end == string::npos ? string::npos : end - start);
             object_ = ::clCreateKernel(program(), fixedName.c_str(), &error);
         }
