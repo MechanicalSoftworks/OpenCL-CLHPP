@@ -6833,6 +6833,22 @@ inline Kernel::Kernel(const Program& program, const char* name, cl_int* err)
     cl_int error;
 
     object_ = ::clCreateKernel(program(), name, &error);
+
+    // MECHSOFT: Disgusting workaround for a bug in an Intel driver release.
+    // ".1" was being appended to the names of all kernels. See:
+    // https://community.intel.com/t5/GPU-Compute-Software/OpenCL-Kernel-Name-appends-quot-1-quot/m-p/1416721
+    // https://community.intel.com/t5/GPU-Compute-Software/OpenCL-CL-INVALID-KERNEL-ARGS-with-driver-gt-30-0-101-1340/td-p/1420021
+    if (error == CL_INVALID_KERNEL_NAME) {
+        const auto      names = program.getInfo<CL_PROGRAM_KERNEL_NAMES>();
+        const string    pattern = string(name) + ".";
+        const auto      start = names.find(pattern);
+        if (start != string::npos) {
+            const auto      end = names.find(';', start + pattern.length());
+            const string    fixedName = names.substr(start, end == string::npos ? string::npos : end - start);
+            object_ = ::clCreateKernel(program(), fixedName.c_str(), &error);
+        }
+    }
+
     detail::errHandler(error, __CREATE_KERNEL_ERR);
 
     if (err != nullptr) {
