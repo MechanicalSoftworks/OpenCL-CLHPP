@@ -5612,6 +5612,12 @@ public:
         sizes_[2] = size2;
     }
 
+    //! \brief Constructs two-dimensional range.
+    NDRange(cl_ulong2 x) : NDRange(x.x, x.y) {}
+
+    //! \brief Constructs three-dimensional range.
+    NDRange(cl_ulong3 x) : NDRange(x.x, x.y, x.z) {}
+
     //! \brief Constructs one-dimensional range.
     NDRange(array<size_type, 1> a) : NDRange(a[0]){}
 
