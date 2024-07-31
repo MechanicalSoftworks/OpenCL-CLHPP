@@ -3824,7 +3824,7 @@ inline cl_int enqueueMapSVM(
 template<typename T, class SVMTrait>
 class SVMAllocator {
 private:
-    Context context_;
+    CommandQueue queue_;
 
 public:
     typedef T value_type;
@@ -3845,24 +3845,24 @@ public:
     friend class SVMAllocator;
 
     SVMAllocator() :
-        context_(Context::getDefault())
+        queue_(CommandQueue::getDefault())
     {
     }
 
-    explicit SVMAllocator(cl::Context context) :
-        context_(context)
+    explicit SVMAllocator(cl::CommandQueue queue) :
+        queue_(queue)
     {
     }
 
 
     SVMAllocator(const SVMAllocator &other) :
-        context_(other.context_)
+        queue_(other.queue_)
     {
     }
 
     template<typename U>
     SVMAllocator(const SVMAllocator<U, SVMTrait> &other) :
-        context_(other.context_)
+        queue_(other.queue_)
     {
     }
 
@@ -3893,7 +3893,7 @@ public:
         // Allocate memory with default alignment matching the size of the type
         void* voidPointer =
             clSVMAlloc(
-            context_(),
+            queue_.getInfo<CL_QUEUE_CONTEXT>()(),
             SVMTrait::getSVMMemFlags(),
             size*sizeof(T),
             0);
@@ -3908,7 +3908,7 @@ public:
 
         // If allocation was coarse-grained then map it
         if (!(SVMTrait::getSVMMemFlags() & CL_MEM_SVM_FINE_GRAIN_BUFFER)) {
-            cl_int err = enqueueMapSVM(retValue, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, size*sizeof(T));
+            cl_int err = queue_.enqueueMapSVM(retValue, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, size*sizeof(T));
             if (err != CL_SUCCESS) {
                 std::bad_alloc excep;
                 throw excep;
@@ -3921,7 +3921,7 @@ public:
 
     void deallocate(pointer p, size_type)
     {
-        clSVMFree(context_(), p);
+        clSVMFree(queue_.getInfo<CL_QUEUE_CONTEXT>()(), p);
     }
 
     /**
@@ -3932,7 +3932,7 @@ public:
     {
         size_type maxSize = std::numeric_limits<size_type>::max() / sizeof(T);
 
-        for (const Device &d : context_.getInfo<CL_CONTEXT_DEVICES>()) {
+        for (const Device &d : queue_.getInfo<CL_QUEUE_CONTEXT>().getInfo<CL_CONTEXT_DEVICES>()) {
             maxSize = std::min(
                 maxSize, 
                 static_cast<size_type>(d.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>()));
@@ -3954,11 +3954,11 @@ public:
     }
 
     /**
-     * Returns true if the contexts match.
+     * Returns true if the queues match.
      */
     inline bool operator==(SVMAllocator const& rhs)
     {
-        return (context_==rhs.context_);
+        return (queue_==rhs.queue_);
     }
 
     inline bool operator!=(SVMAllocator const& a)
@@ -4063,19 +4063,19 @@ cl::pointer<T, detail::Deleter<SVMAllocator<T, SVMTrait>>> allocate_svm(const cl
  * 
  */
 template < class T >
-using coarse_svm_vector = vector<T, cl::SVMAllocator<int, cl::SVMTraitCoarse<>>>;
+using coarse_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitCoarse<>>>;
 
 /*! \brief Vector alias to simplify contruction of fine-grained SVM containers.
 *
 */
 template < class T >
-using fine_svm_vector = vector<T, cl::SVMAllocator<int, cl::SVMTraitFine<>>>;
+using fine_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitFine<>>>;
 
 /*! \brief Vector alias to simplify contruction of fine-grained SVM containers that support platform atomics.
 *
 */
 template < class T >
-using atomic_svm_vector = vector<T, cl::SVMAllocator<int, cl::SVMTraitAtomic<>>>;
+using atomic_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitAtomic<>>>;
 
 #endif // #if CL_HPP_TARGET_OPENCL_VERSION >= 200
 
