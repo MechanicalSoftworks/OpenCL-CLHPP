@@ -3721,85 +3721,6 @@ cl_int copy( const CommandQueue &queue, const cl::Buffer &buffer, IteratorType s
 
 
 #if CL_HPP_TARGET_OPENCL_VERSION >= 200
-namespace detail
-{
-    class SVMTraitNull
-    {
-    public:
-        static cl_svm_mem_flags getSVMMemFlags()
-        {
-            return 0;
-        }
-    };
-} // namespace detail
-
-template<class Trait = detail::SVMTraitNull>
-class SVMTraitReadWrite
-{
-public:
-    static cl_svm_mem_flags getSVMMemFlags()
-    {
-        return CL_MEM_READ_WRITE |
-            Trait::getSVMMemFlags();
-    }
-};
-
-template<class Trait = detail::SVMTraitNull>
-class SVMTraitReadOnly
-{
-public:
-    static cl_svm_mem_flags getSVMMemFlags()
-    {
-        return CL_MEM_READ_ONLY |
-            Trait::getSVMMemFlags();
-    }
-};
-
-template<class Trait = detail::SVMTraitNull>
-class SVMTraitWriteOnly
-{
-public:
-    static cl_svm_mem_flags getSVMMemFlags()
-    {
-        return CL_MEM_WRITE_ONLY |
-            Trait::getSVMMemFlags();
-    }
-};
-
-template<class Trait = SVMTraitReadWrite<>>
-class SVMTraitCoarse
-{
-public:
-    static cl_svm_mem_flags getSVMMemFlags()
-    {
-        return Trait::getSVMMemFlags();
-    }
-};
-
-template<class Trait = SVMTraitReadWrite<>>
-class SVMTraitFine
-{
-public:
-    static cl_svm_mem_flags getSVMMemFlags()
-    {
-        return CL_MEM_SVM_FINE_GRAIN_BUFFER |
-            Trait::getSVMMemFlags();
-    }
-};
-
-template<class Trait = SVMTraitReadWrite<>>
-class SVMTraitAtomic
-{
-public:
-    static cl_svm_mem_flags getSVMMemFlags()
-    {
-        return
-            CL_MEM_SVM_FINE_GRAIN_BUFFER |
-            CL_MEM_SVM_ATOMICS |
-            Trait::getSVMMemFlags();
-    }
-};
-
 // Pre-declare SVM map function
 template<typename T>
 inline cl_int enqueueMapSVM(
@@ -3809,275 +3730,7 @@ inline cl_int enqueueMapSVM(
     size_type size,
     const vector<Event>* events = nullptr,
     Event* event = nullptr);
-
-/**
- * STL-like allocator class for managing SVM objects provided for convenience.
- *
- * Note that while this behaves like an allocator for the purposes of constructing vectors and similar objects,
- * care must be taken when using with smart pointers.
- * The allocator should not be used to construct a unique_ptr if we are using coarse-grained SVM mode because
- * the coarse-grained management behaviour would behave incorrectly with respect to reference counting.
- *
- * Instead the allocator embeds a Deleter which may be used with unique_ptr and is used
- * with the allocate_shared and allocate_ptr supplied operations.
- */
-template<typename T, class SVMTrait>
-class SVMAllocator {
-private:
-    CommandQueue queue_;
-
-public:
-    typedef T value_type;
-    typedef value_type* pointer;
-    typedef const value_type* const_pointer;
-    typedef value_type& reference;
-    typedef const value_type& const_reference;
-    typedef std::size_t size_type;
-    typedef std::ptrdiff_t difference_type;
-
-    template<typename U>
-    struct rebind
-    {
-        typedef SVMAllocator<U, SVMTrait> other;
-    };
-
-    template<typename U, typename V>
-    friend class SVMAllocator;
-
-    SVMAllocator() :
-        queue_(CommandQueue::getDefault())
-    {
-    }
-
-    explicit SVMAllocator(cl::CommandQueue queue) :
-        queue_(queue)
-    {
-    }
-
-
-    SVMAllocator(const SVMAllocator &other) :
-        queue_(other.queue_)
-    {
-    }
-
-    template<typename U>
-    SVMAllocator(const SVMAllocator<U, SVMTrait> &other) :
-        queue_(other.queue_)
-    {
-    }
-
-    ~SVMAllocator()
-    {
-    }
-
-    pointer address(reference r) CL_HPP_NOEXCEPT_
-    {
-        return std::addressof(r);
-    }
-
-    const_pointer address(const_reference r) CL_HPP_NOEXCEPT_
-    {
-        return std::addressof(r);
-    }
-
-    /**
-     * Allocate an SVM pointer.
-     *
-     * If the allocator is coarse-grained, this will take ownership to allow
-     * containers to correctly construct data in place. 
-     */
-    pointer allocate(
-        size_type size,
-        typename cl::SVMAllocator<void, SVMTrait>::const_pointer = 0)
-    {
-        // Allocate memory with default alignment matching the size of the type
-        void* voidPointer =
-            clSVMAlloc(
-            queue_.getInfo<CL_QUEUE_CONTEXT>()(),
-            SVMTrait::getSVMMemFlags(),
-            size*sizeof(T),
-            0);
-        pointer retValue = reinterpret_cast<pointer>(
-            voidPointer);
-#if defined(CL_HPP_ENABLE_EXCEPTIONS)
-        if (!retValue) {
-            std::bad_alloc excep;
-            throw excep;
-        }
-#endif // #if defined(CL_HPP_ENABLE_EXCEPTIONS)
-
-        // If allocation was coarse-grained then map it
-        if (!(SVMTrait::getSVMMemFlags() & CL_MEM_SVM_FINE_GRAIN_BUFFER)) {
-            cl_int err = queue_.enqueueMapSVM(retValue, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, size*sizeof(T));
-            if (err != CL_SUCCESS) {
-                std::bad_alloc excep;
-                throw excep;
-            }
-        }
-
-        // If exceptions disabled, return null pointer from allocator
-        return retValue;
-    }
-
-    void deallocate(pointer p, size_type)
-    {
-        clSVMFree(queue_.getInfo<CL_QUEUE_CONTEXT>()(), p);
-    }
-
-    /**
-     * Return the maximum possible allocation size.
-     * This is the minimum of the maximum sizes of all devices in the context.
-     */
-    size_type max_size() const CL_HPP_NOEXCEPT_
-    {
-        size_type maxSize = std::numeric_limits<size_type>::max() / sizeof(T);
-
-        for (const Device &d : queue_.getInfo<CL_QUEUE_CONTEXT>().getInfo<CL_CONTEXT_DEVICES>()) {
-            maxSize = std::min(
-                maxSize, 
-                static_cast<size_type>(d.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>()));
-        }
-
-        return maxSize;
-    }
-
-    template< class U, class... Args >
-    void construct(U* p, Args&&... args)
-    {
-        new(p)T(args...);
-    }
-
-    template< class U >
-    void destroy(U* p)
-    {
-        p->~U();
-    }
-
-    /**
-     * Returns true if the queues match.
-     */
-    inline bool operator==(SVMAllocator const& rhs)
-    {
-        return (queue_==rhs.queue_);
-    }
-
-    inline bool operator!=(SVMAllocator const& a)
-    {
-        return !operator==(a);
-    }
-}; // class SVMAllocator        return cl::pointer<T>(tmp, detail::Deleter<T, Alloc>{alloc, copies});
-
-
-template<class SVMTrait>
-class SVMAllocator<void, SVMTrait> {
-public:
-    typedef void value_type;
-    typedef value_type* pointer;
-    typedef const value_type* const_pointer;
-
-    template<typename U>
-    struct rebind
-    {
-        typedef SVMAllocator<U, SVMTrait> other;
-    };
-
-    template<typename U, typename V>
-    friend class SVMAllocator;
-};
-
-#if !defined(CL_HPP_NO_STD_UNIQUE_PTR)
-namespace detail
-{
-    template<class Alloc>
-    class Deleter {
-    private:
-        Alloc alloc_;
-        size_type copies_;
-
-    public:
-        typedef typename std::allocator_traits<Alloc>::pointer pointer;
-
-        Deleter(const Alloc &alloc, size_type copies) : alloc_{ alloc }, copies_{ copies }
-        {
-        }
-
-        void operator()(pointer ptr) const {
-            Alloc tmpAlloc{ alloc_ };
-            std::allocator_traits<Alloc>::destroy(tmpAlloc, std::addressof(*ptr));
-            std::allocator_traits<Alloc>::deallocate(tmpAlloc, ptr, copies_);
-        }
-    };
-} // namespace detail
-
-/**
- * Allocation operation compatible with std::allocate_ptr.
- * Creates a unique_ptr<T> by default.
- * This requirement is to ensure that the control block is not
- * allocated in memory inaccessible to the host.
- */
-template <class T, class Alloc, class... Args>
-cl::pointer<T, detail::Deleter<Alloc>> allocate_pointer(const Alloc &alloc_, Args&&... args)
-{
-    Alloc alloc(alloc_);
-    static const size_type copies = 1;
-
-    // Ensure that creation of the management block and the
-    // object are dealt with separately such that we only provide a deleter
-
-    T* tmp = std::allocator_traits<Alloc>::allocate(alloc, copies);
-    if (!tmp) {
-        std::bad_alloc excep;
-        throw excep;
-    }
-    try {
-        std::allocator_traits<Alloc>::construct(
-            alloc,
-            std::addressof(*tmp),
-            std::forward<Args>(args)...);
-
-        return cl::pointer<T, detail::Deleter<Alloc>>(tmp, detail::Deleter<Alloc>{alloc, copies});
-    }
-    catch (std::bad_alloc&)
-    {
-        std::allocator_traits<Alloc>::deallocate(alloc, tmp, copies);
-        throw;
-    }
-}
-
-template< class T, class SVMTrait, class... Args >
-cl::pointer<T, detail::Deleter<SVMAllocator<T, SVMTrait>>> allocate_svm(Args... args)
-{
-    SVMAllocator<T, SVMTrait> alloc;
-    return cl::allocate_pointer<T>(alloc, args...);
-}
-
-template< class T, class SVMTrait, class... Args >
-cl::pointer<T, detail::Deleter<SVMAllocator<T, SVMTrait>>> allocate_svm(const cl::Context &c, Args... args)
-{
-    SVMAllocator<T, SVMTrait> alloc(c);
-    return cl::allocate_pointer<T>(alloc, args...);
-}
-#endif // #if !defined(CL_HPP_NO_STD_UNIQUE_PTR)
-
-/*! \brief Vector alias to simplify contruction of coarse-grained SVM containers.
- * 
- */
-template < class T >
-using coarse_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitCoarse<>>>;
-
-/*! \brief Vector alias to simplify contruction of fine-grained SVM containers.
-*
-*/
-template < class T >
-using fine_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitFine<>>>;
-
-/*! \brief Vector alias to simplify contruction of fine-grained SVM containers that support platform atomics.
-*
-*/
-template < class T >
-using atomic_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitAtomic<>>>;
-
-#endif // #if CL_HPP_TARGET_OPENCL_VERSION >= 200
+#endif
 
 
 /*! \brief Class interface for Buffer Memory Objects.
@@ -10440,6 +10093,357 @@ namespace compatibility {
         }
     };
 } // namespace compatibility
+
+
+#if CL_HPP_TARGET_OPENCL_VERSION >= 200
+namespace detail
+{
+    class SVMTraitNull
+    {
+    public:
+        static cl_svm_mem_flags getSVMMemFlags()
+        {
+            return 0;
+        }
+    };
+} // namespace detail
+
+template<class Trait = detail::SVMTraitNull>
+class SVMTraitReadWrite
+{
+public:
+    static cl_svm_mem_flags getSVMMemFlags()
+    {
+        return CL_MEM_READ_WRITE |
+            Trait::getSVMMemFlags();
+    }
+};
+
+template<class Trait = detail::SVMTraitNull>
+class SVMTraitReadOnly
+{
+public:
+    static cl_svm_mem_flags getSVMMemFlags()
+    {
+        return CL_MEM_READ_ONLY |
+            Trait::getSVMMemFlags();
+    }
+};
+
+template<class Trait = detail::SVMTraitNull>
+class SVMTraitWriteOnly
+{
+public:
+    static cl_svm_mem_flags getSVMMemFlags()
+    {
+        return CL_MEM_WRITE_ONLY |
+            Trait::getSVMMemFlags();
+    }
+};
+
+template<class Trait = SVMTraitReadWrite<>>
+class SVMTraitCoarse
+{
+public:
+    static cl_svm_mem_flags getSVMMemFlags()
+    {
+        return Trait::getSVMMemFlags();
+    }
+};
+
+template<class Trait = SVMTraitReadWrite<>>
+class SVMTraitFine
+{
+public:
+    static cl_svm_mem_flags getSVMMemFlags()
+    {
+        return CL_MEM_SVM_FINE_GRAIN_BUFFER |
+            Trait::getSVMMemFlags();
+    }
+};
+
+template<class Trait = SVMTraitReadWrite<>>
+class SVMTraitAtomic
+{
+public:
+    static cl_svm_mem_flags getSVMMemFlags()
+    {
+        return
+            CL_MEM_SVM_FINE_GRAIN_BUFFER |
+            CL_MEM_SVM_ATOMICS |
+            Trait::getSVMMemFlags();
+    }
+};
+
+/**
+ * STL-like allocator class for managing SVM objects provided for convenience.
+ *
+ * Note that while this behaves like an allocator for the purposes of constructing vectors and similar objects,
+ * care must be taken when using with smart pointers.
+ * The allocator should not be used to construct a unique_ptr if we are using coarse-grained SVM mode because
+ * the coarse-grained management behaviour would behave incorrectly with respect to reference counting.
+ *
+ * Instead the allocator embeds a Deleter which may be used with unique_ptr and is used
+ * with the allocate_shared and allocate_ptr supplied operations.
+ */
+template<typename T, class SVMTrait>
+class SVMAllocator {
+private:
+    CommandQueue queue_;
+
+public:
+    typedef T value_type;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+    typedef value_type& reference;
+    typedef const value_type& const_reference;
+    typedef std::size_t size_type;
+    typedef std::ptrdiff_t difference_type;
+
+    template<typename U>
+    struct rebind
+    {
+        typedef SVMAllocator<U, SVMTrait> other;
+    };
+
+    template<typename U, typename V>
+    friend class SVMAllocator;
+
+    SVMAllocator() :
+        queue_(CommandQueue::getDefault())
+    {
+    }
+
+    explicit SVMAllocator(cl::CommandQueue queue) :
+        queue_(queue)
+    {
+    }
+
+
+    SVMAllocator(const SVMAllocator &other) :
+        queue_(other.queue_)
+    {
+    }
+
+    template<typename U>
+    SVMAllocator(const SVMAllocator<U, SVMTrait> &other) :
+        queue_(other.queue_)
+    {
+    }
+
+    ~SVMAllocator()
+    {
+    }
+
+    pointer address(reference r) CL_HPP_NOEXCEPT_
+    {
+        return std::addressof(r);
+    }
+
+    const_pointer address(const_reference r) CL_HPP_NOEXCEPT_
+    {
+        return std::addressof(r);
+    }
+
+    /**
+     * Allocate an SVM pointer.
+     *
+     * If the allocator is coarse-grained, this will take ownership to allow
+     * containers to correctly construct data in place. 
+     */
+    pointer allocate(
+        size_type size,
+        typename cl::SVMAllocator<void, SVMTrait>::const_pointer = 0)
+    {
+        // Allocate memory with default alignment matching the size of the type
+        void* voidPointer =
+            clSVMAlloc(
+            queue_.getInfo<CL_QUEUE_CONTEXT>()(),
+            SVMTrait::getSVMMemFlags(),
+            size*sizeof(T),
+            0);
+        pointer retValue = reinterpret_cast<pointer>(
+            voidPointer);
+#if defined(CL_HPP_ENABLE_EXCEPTIONS)
+        if (!retValue) {
+            std::bad_alloc excep;
+            throw excep;
+        }
+#endif // #if defined(CL_HPP_ENABLE_EXCEPTIONS)
+
+        // If allocation was coarse-grained then map it
+        if (!(SVMTrait::getSVMMemFlags() & CL_MEM_SVM_FINE_GRAIN_BUFFER)) {
+            cl_int err = queue_.enqueueMapSVM(retValue, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, size*sizeof(T));
+            if (err != CL_SUCCESS) {
+                std::bad_alloc excep;
+                throw excep;
+            }
+        }
+
+        // If exceptions disabled, return null pointer from allocator
+        return retValue;
+    }
+
+    void deallocate(pointer p, size_type)
+    {
+        clSVMFree(queue_.getInfo<CL_QUEUE_CONTEXT>()(), p);
+    }
+
+    /**
+     * Return the maximum possible allocation size.
+     * This is the minimum of the maximum sizes of all devices in the context.
+     */
+    size_type max_size() const CL_HPP_NOEXCEPT_
+    {
+        size_type maxSize = std::numeric_limits<size_type>::max() / sizeof(T);
+
+        for (const Device &d : queue_.getInfo<CL_QUEUE_CONTEXT>().getInfo<CL_CONTEXT_DEVICES>()) {
+            maxSize = std::min(
+                maxSize, 
+                static_cast<size_type>(d.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>()));
+        }
+
+        return maxSize;
+    }
+
+    template< class U, class... Args >
+    void construct(U* p, Args&&... args)
+    {
+        new(p)T(args...);
+    }
+
+    template< class U >
+    void destroy(U* p)
+    {
+        p->~U();
+    }
+
+    /**
+     * Returns true if the queues match.
+     */
+    inline bool operator==(SVMAllocator const& rhs)
+    {
+        return (queue_==rhs.queue_);
+    }
+
+    inline bool operator!=(SVMAllocator const& a)
+    {
+        return !operator==(a);
+    }
+}; // class SVMAllocator        return cl::pointer<T>(tmp, detail::Deleter<T, Alloc>{alloc, copies});
+
+
+template<class SVMTrait>
+class SVMAllocator<void, SVMTrait> {
+public:
+    typedef void value_type;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+
+    template<typename U>
+    struct rebind
+    {
+        typedef SVMAllocator<U, SVMTrait> other;
+    };
+
+    template<typename U, typename V>
+    friend class SVMAllocator;
+};
+
+#if !defined(CL_HPP_NO_STD_UNIQUE_PTR)
+namespace detail
+{
+    template<class Alloc>
+    class Deleter {
+    private:
+        Alloc alloc_;
+        size_type copies_;
+
+    public:
+        typedef typename std::allocator_traits<Alloc>::pointer pointer;
+
+        Deleter(const Alloc &alloc, size_type copies) : alloc_{ alloc }, copies_{ copies }
+        {
+        }
+
+        void operator()(pointer ptr) const {
+            Alloc tmpAlloc{ alloc_ };
+            std::allocator_traits<Alloc>::destroy(tmpAlloc, std::addressof(*ptr));
+            std::allocator_traits<Alloc>::deallocate(tmpAlloc, ptr, copies_);
+        }
+    };
+} // namespace detail
+
+/**
+ * Allocation operation compatible with std::allocate_ptr.
+ * Creates a unique_ptr<T> by default.
+ * This requirement is to ensure that the control block is not
+ * allocated in memory inaccessible to the host.
+ */
+template <class T, class Alloc, class... Args>
+cl::pointer<T, detail::Deleter<Alloc>> allocate_pointer(const Alloc &alloc_, Args&&... args)
+{
+    Alloc alloc(alloc_);
+    static const size_type copies = 1;
+
+    // Ensure that creation of the management block and the
+    // object are dealt with separately such that we only provide a deleter
+
+    T* tmp = std::allocator_traits<Alloc>::allocate(alloc, copies);
+    if (!tmp) {
+        std::bad_alloc excep;
+        throw excep;
+    }
+    try {
+        std::allocator_traits<Alloc>::construct(
+            alloc,
+            std::addressof(*tmp),
+            std::forward<Args>(args)...);
+
+        return cl::pointer<T, detail::Deleter<Alloc>>(tmp, detail::Deleter<Alloc>{alloc, copies});
+    }
+    catch (std::bad_alloc&)
+    {
+        std::allocator_traits<Alloc>::deallocate(alloc, tmp, copies);
+        throw;
+    }
+}
+
+template< class T, class SVMTrait, class... Args >
+cl::pointer<T, detail::Deleter<SVMAllocator<T, SVMTrait>>> allocate_svm(Args... args)
+{
+    SVMAllocator<T, SVMTrait> alloc;
+    return cl::allocate_pointer<T>(alloc, args...);
+}
+
+template< class T, class SVMTrait, class... Args >
+cl::pointer<T, detail::Deleter<SVMAllocator<T, SVMTrait>>> allocate_svm(const cl::Context &c, Args... args)
+{
+    SVMAllocator<T, SVMTrait> alloc(c);
+    return cl::allocate_pointer<T>(alloc, args...);
+}
+#endif // #if !defined(CL_HPP_NO_STD_UNIQUE_PTR)
+
+/*! \brief Vector alias to simplify contruction of coarse-grained SVM containers.
+ * 
+ */
+template < class T >
+using coarse_svm_vector = vector<T, cl::SVMAllocator<T, cl::SVMTraitCoarse<>>>;
+
+/*! \brief Vector alias to simplify contruction of fine-grained SVM containers.
+*
+*/
+template < class T >
+using fine_svm_vector = vector<T, cl::SVMAllocator<int, cl::SVMTraitFine<>>>;
+
+/*! \brief Vector alias to simplify contruction of fine-grained SVM containers that support platform atomics.
+*
+*/
+template < class T >
+using atomic_svm_vector = vector<T, cl::SVMAllocator<int, cl::SVMTraitAtomic<>>>;
+
+#endif // #if CL_HPP_TARGET_OPENCL_VERSION >= 200
+
 
 #ifdef cl_khr_semaphore
 class Semaphore : public detail::Wrapper<cl_semaphore_khr>
