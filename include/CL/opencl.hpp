@@ -93,13 +93,13 @@
  * classes based loosely on STL versions. These were difficult to 
  * maintain and very rarely used. For the 2.0 header we now assume
  * the presence of the standard library unless requested otherwise.
- * We use std::array, std::vector, std::shared_ptr and std::string 
+ * We use ::std::array, ::std::vector, ::std::shared_ptr and ::std::string 
  * throughout to safely manage memory and reduce the chance of a 
  * recurrance of earlier memory management bugs.
  *
  * These classes are used through typedefs in the cl namespace: 
  * cl::array, cl::vector, cl::pointer and cl::string.
- * In addition cl::allocate_pointer forwards to std::allocate_shared
+ * In addition cl::allocate_pointer forwards to ::std::allocate_shared
  * by default.
  * In all cases these standard library classes can be replaced with 
  * custom interface-compatible versions using the CL_HPP_NO_STD_ARRAY, 
@@ -109,7 +109,7 @@
  * The OpenCL 1.x versions of the C++ bindings included a size_t wrapper
  * class to interface with kernel enqueue. This caused unpleasant interactions
  * with the standard size_t declaration and led to namespacing bugs.
- * In the 2.0 version we have replaced this with a std::array-based interface.
+ * In the 2.0 version we have replaced this with a ::std::array-based interface.
  * However, the old behaviour can be regained for backward compatibility
  * using the CL_HPP_ENABLE_SIZE_T_COMPATIBILITY macro.
  *
@@ -176,7 +176,7 @@
  * - CL_HPP_ENABLE_SIZE_T_COMPATIBILITY
  *
  *   Backward compatibility option to support cl.hpp-style size_t
- *   class.  Replaces the updated std::array derived version and
+ *   class.  Replaces the updated ::std::array derived version and
  *   removal of size_t from the namespace. Note that in this case the
  *   new size_t class is placed in the cl::compatibility namespace and
  *   thus requires an additional using declaration for direct backward
@@ -214,7 +214,7 @@
  * also the supplied vector and string classes, see following sections for
  * decriptions of these features.
  * 
- * Note: the C++ bindings use std::call_once and therefore may need to be
+ * Note: the C++ bindings use ::std::call_once and therefore may need to be
  * compiled using special command-line options (such as "-pthread") on some
  * platforms!
  *
@@ -233,30 +233,30 @@
     int main(void)
     {
         // Filter for a 2.0 or newer platform and set it as the default
-        std::vector<cl::Platform> platforms;
+        ::std::vector<cl::Platform> platforms;
         cl::Platform::get(&platforms);
         cl::Platform plat;
         for (auto &p : platforms) {
-            std::string platver = p.getInfo<CL_PLATFORM_VERSION>();
-            if (platver.find("OpenCL 2.") != std::string::npos ||
-                platver.find("OpenCL 3.") != std::string::npos) {
+            ::std::string platver = p.getInfo<CL_PLATFORM_VERSION>();
+            if (platver.find("OpenCL 2.") != ::std::string::npos ||
+                platver.find("OpenCL 3.") != ::std::string::npos) {
                 // Note: an OpenCL 3.x platform may not support all required features!
                 plat = p;
             }
         }
         if (plat() == 0) {
-            std::cout << "No OpenCL 2.0 or newer platform found.\n";
+            ::std::cout << "No OpenCL 2.0 or newer platform found.\n";
             return -1;
         }
 
         cl::Platform newP = cl::Platform::setDefault(plat);
         if (newP != plat) {
-            std::cout << "Error setting default platform.\n";
+            ::std::cout << "Error setting default platform.\n";
             return -1;
         }
 
         // C++11 raw string literal for the first kernel
-        std::string kernel1{R"CLC(
+        ::std::string kernel1{R"CLC(
             global int globalA;
             kernel void updateGlobal()
             {
@@ -265,7 +265,7 @@
         )CLC"};
 
         // Raw string literal for the second kernel
-        std::string kernel2{R"CLC(
+        ::std::string kernel2{R"CLC(
             typedef struct { global int *bar; } Foo;
             kernel void vectorAdd(global const Foo* aNum, global const int *inputA, global const int *inputB,
                                   global int *output, int val, write_only pipe int outPipe, queue_t childQueue)
@@ -291,7 +291,7 @@
             }
         )CLC"};
 
-        std::vector<std::string> programStrings;
+        ::std::vector<::std::string> programStrings;
         programStrings.push_back(kernel1);
         programStrings.push_back(kernel2);
 
@@ -304,7 +304,7 @@
             cl_int buildErr = CL_SUCCESS;
             auto buildInfo = vectorAddProgram.getBuildInfo<CL_PROGRAM_BUILD_LOG>(&buildErr);
             for (auto &pair : buildInfo) {
-                std::cerr << pair.second << std::endl << std::endl;
+                ::std::cerr << pair.second << ::std::endl << ::std::endl;
             }
 
             return 1;
@@ -329,13 +329,13 @@
         auto fooPointer = cl::allocate_pointer<Foo>(svmAllocReadOnly);
         fooPointer->bar = anSVMInt.get();
         cl::SVMAllocator<int, cl::SVMTraitCoarse<>> svmAlloc;
-        std::vector<int, cl::SVMAllocator<int, cl::SVMTraitCoarse<>>> inputA(numElements, 1, svmAlloc);
+        ::std::vector<int, cl::SVMAllocator<int, cl::SVMTraitCoarse<>>> inputA(numElements, 1, svmAlloc);
         cl::coarse_svm_vector<int> inputB(numElements, 2, svmAlloc);
 
         //////////////
         // Traditional cl_mem allocations
 
-        std::vector<int> output(numElements, 0xdeadbeef);
+        ::std::vector<int> output(numElements, 0xdeadbeef);
         cl::Buffer outputBuffer(begin(output), end(output), false);
         cl::Pipe aPipe(sizeof(cl_int), numElements / 2);
 
@@ -377,11 +377,11 @@
 
         cl::Device d = cl::Device::getDefault();
 
-        std::cout << "Output:\n";
+        ::std::cout << "Output:\n";
         for (int i = 1; i < numElements; ++i) {
-            std::cout << "\t" << output[i] << "\n";
+            ::std::cout << "\t" << output[i] << "\n";
         }
-        std::cout << "\n\n";
+        ::std::cout << "\n\n";
 
         return 0;
     }
@@ -595,15 +595,15 @@ namespace cl {
 #if !defined(CL_HPP_NO_STD_VECTOR)
 #include <vector>
 namespace cl {
-    template < class T, class Alloc = std::allocator<T> >
-    using vector = std::vector<T, Alloc>;
+    template < class T, class Alloc = ::std::allocator<T> >
+    using vector = ::std::vector<T, Alloc>;
 } // namespace cl
 #endif // #if !defined(CL_HPP_NO_STD_VECTOR)
 
 #if !defined(CL_HPP_NO_STD_STRING)
 #include <string>
 namespace cl {
-    using string = std::string;
+    using string = ::std::string;
 } // namespace cl
 #endif // #if !defined(CL_HPP_NO_STD_STRING)
 
@@ -615,7 +615,7 @@ namespace cl {
     // Replace unique_ptr and allocate_pointer for internal use
     // to allow user to replace them
     template<class T, class D>
-    using pointer = std::unique_ptr<T, D>;
+    using pointer = ::std::unique_ptr<T, D>;
 } // namespace cl
 #endif 
 #endif // #if CL_HPP_TARGET_OPENCL_VERSION >= 200
@@ -623,7 +623,7 @@ namespace cl {
 #include <array>
 namespace cl {
     template < class T, size_type N >
-    using array = std::array<T, N>;
+    using array = ::std::array<T, N>;
 } // namespace cl
 #endif // #if !defined(CL_HPP_NO_STD_ARRAY)
 
@@ -746,7 +746,7 @@ namespace cl {
      * 
      *  This may be thrown by API functions when CL_HPP_ENABLE_EXCEPTIONS is defined.
      */
-    class Error : public std::exception
+    class Error : public ::std::exception
     {
     private:
         cl_int err_;
@@ -1143,7 +1143,7 @@ inline cl_int getInfoHelper(Func f, cl_uint name, vector<T>* param, long)
         return err;
     }
     if (param) {
-        *param = std::move(localData);
+        *param = ::std::move(localData);
     }
 
     return CL_SUCCESS;
@@ -1196,7 +1196,7 @@ inline cl_int getInfoHelper(Func f, cl_uint name, string* param, long)
         return err;
     }
 
-    // std::string has a constant data member
+    // ::std::string has a constant data member
     // a char vector does not
     if (required > 0) {
         vector<char> value(required);
@@ -2344,7 +2344,7 @@ struct ImageFormat : public cl_image_format
 class Device : public detail::Wrapper<cl_device_id>
 {
 private:
-    static std::once_flag default_initialized_;
+    static ::std::once_flag default_initialized_;
     static Device default_;
     static cl_int default_error_;
 
@@ -2394,7 +2394,7 @@ public:
     static Device getDefault(
         cl_int *errResult = nullptr)
     {
-        std::call_once(default_initialized_, makeDefault);
+        ::std::call_once(default_initialized_, makeDefault);
         detail::errHandler(default_error_);
         if (errResult != nullptr) {
             *errResult = default_error_;
@@ -2411,7 +2411,7 @@ public:
     */
     static Device setDefault(const Device &default_device)
     {
-        std::call_once(default_initialized_, makeDefaultProvided, std::cref(default_device));
+        ::std::call_once(default_initialized_, makeDefaultProvided, ::std::cref(default_device));
         detail::errHandler(default_error_);
         return default_;
     }
@@ -2481,9 +2481,9 @@ public:
      * CL_DEVICE_PROFILING_TIMER_RESOLUTION query.
      * @return A pair of (device timer, host timer) timer values.
      */
-    std::pair<cl_ulong, cl_ulong> getDeviceAndHostTimer(cl_int *error = nullptr)
+    ::std::pair<cl_ulong, cl_ulong> getDeviceAndHostTimer(cl_int *error = nullptr)
     {
-        std::pair<cl_ulong, cl_ulong> retVal;
+        ::std::pair<cl_ulong, cl_ulong> retVal;
         cl_int err =
             clGetDeviceAndHostTimer(this->get(), &(retVal.first), &(retVal.second));
         detail::errHandler(
@@ -2586,7 +2586,7 @@ public:
 #endif // defined(cl_ext_device_fission)
 };
 
-using BuildLogType = vector<std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, CL_PROGRAM_BUILD_LOG>::param_type>>;
+using BuildLogType = vector<::std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, CL_PROGRAM_BUILD_LOG>::param_type>>;
 #if defined(CL_HPP_ENABLE_EXCEPTIONS)
 /**
 * Exception class for build errors to carry build info
@@ -2632,7 +2632,7 @@ namespace detail {
 } // namespace detail
 #endif // #if defined(CL_HPP_ENABLE_EXCEPTIONS)
 
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag Device::default_initialized_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag Device::default_initialized_;
 CL_HPP_DEFINE_STATIC_MEMBER_ Device Device::default_;
 CL_HPP_DEFINE_STATIC_MEMBER_ cl_int Device::default_error_ = CL_SUCCESS;
 
@@ -2646,7 +2646,7 @@ CL_HPP_DEFINE_STATIC_MEMBER_ cl_int Device::default_error_ = CL_SUCCESS;
 class Platform : public detail::Wrapper<cl_platform_id>
 {
 private:
-    static std::once_flag default_initialized_;
+    static ::std::once_flag default_initialized_;
     static Platform default_;
     static cl_int default_error_;
 
@@ -2741,7 +2741,7 @@ public:
     static Platform getDefault(
         cl_int *errResult = nullptr)
     {
-        std::call_once(default_initialized_, makeDefault);
+        ::std::call_once(default_initialized_, makeDefault);
         detail::errHandler(default_error_);
         if (errResult != nullptr) {
             *errResult = default_error_;
@@ -2758,7 +2758,7 @@ public:
      */
     static Platform setDefault(const Platform &default_platform)
     {
-        std::call_once(default_initialized_, makeDefaultProvided, std::cref(default_platform));
+        ::std::call_once(default_initialized_, makeDefaultProvided, ::std::cref(default_platform));
         detail::errHandler(default_error_);
         return default_;
     }
@@ -3000,7 +3000,7 @@ public:
 #endif // CL_HPP_TARGET_OPENCL_VERSION >= 120
 }; // class Platform
 
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag Platform::default_initialized_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag Platform::default_initialized_;
 CL_HPP_DEFINE_STATIC_MEMBER_ Platform Platform::default_;
 CL_HPP_DEFINE_STATIC_MEMBER_ cl_int Platform::default_error_ = CL_SUCCESS;
 
@@ -3034,7 +3034,7 @@ class Context
     : public detail::Wrapper<cl_context>
 {
 private:
-    static std::once_flag default_initialized_;
+    static ::std::once_flag default_initialized_;
     static Context default_;
     static cl_int default_error_;
 
@@ -3257,7 +3257,7 @@ public:
      */
     static Context getDefault(cl_int * err = nullptr) 
     {
-        std::call_once(default_initialized_, makeDefault);
+        ::std::call_once(default_initialized_, makeDefault);
         detail::errHandler(default_error_);
         if (err != nullptr) {
             *err = default_error_;
@@ -3274,7 +3274,7 @@ public:
      */
     static Context setDefault(const Context &default_context)
     {
-        std::call_once(default_initialized_, makeDefaultProvided, std::cref(default_context));
+        ::std::call_once(default_initialized_, makeDefaultProvided, ::std::cref(default_context));
         detail::errHandler(default_error_);
         return default_;
     }
@@ -3427,7 +3427,7 @@ inline void Device::makeDefault()
 #endif
 }
 
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag Context::default_initialized_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag Context::default_initialized_;
 CL_HPP_DEFINE_STATIC_MEMBER_ Context Context::default_;
 CL_HPP_DEFINE_STATIC_MEMBER_ cl_int Context::default_error_ = CL_SUCCESS;
 
@@ -3852,7 +3852,7 @@ public:
         bool useHostPtr = false,
         cl_int* err = nullptr)
     {
-        typedef typename std::iterator_traits<IteratorType>::value_type DataType;
+        typedef typename ::std::iterator_traits<IteratorType>::value_type DataType;
         cl_int error;
 
         cl_mem_flags flags = 0;
@@ -5329,7 +5329,7 @@ struct KernelArgumentHandler;
 // Enable for objects that are not subclasses of memory
 // Pointers, constants etc
 template <typename T>
-struct KernelArgumentHandler<T, typename std::enable_if<!std::is_base_of<cl::Memory, T>::value>::type>
+struct KernelArgumentHandler<T, typename ::std::enable_if<!::std::is_base_of<cl::Memory, T>::value>::type>
 {
     static size_type size(const T&) { return sizeof(T); }
     static const T* ptr(const T& value) { return &value; }
@@ -5338,7 +5338,7 @@ struct KernelArgumentHandler<T, typename std::enable_if<!std::is_base_of<cl::Mem
 // Enable for subclasses of memory where we want to get a reference to the cl_mem out
 // and pass that in for safety
 template <typename T>
-struct KernelArgumentHandler<T, typename std::enable_if<std::is_base_of<cl::Memory, T>::value>::type>
+struct KernelArgumentHandler<T, typename ::std::enable_if<::std::is_base_of<cl::Memory, T>::value>::type>
 {
     static size_type size(const T&) { return sizeof(cl_mem); }
     static const cl_mem* ptr(const T& value) { return &(value()); }
@@ -5532,7 +5532,7 @@ public:
     /*! \brief setArg overload taking a pointer type
      */
     template<typename T>
-    typename std::enable_if<std::is_pointer<T>::value, cl_int>::type
+    typename ::std::enable_if<::std::is_pointer<T>::value, cl_int>::type
         setArg(cl_uint index, const T argPtr)
     {
         return detail::errHandler(
@@ -5544,7 +5544,7 @@ public:
     /*! \brief setArg overload taking a POD type
      */
     template <typename T>
-    typename std::enable_if<!std::is_pointer<T>::value, cl_int>::type
+    typename ::std::enable_if<!::std::is_pointer<T>::value, cl_int>::type
         setArg(cl_uint index, const T &value)
     {
         return detail::errHandler(
@@ -5579,11 +5579,11 @@ public:
     }
 
     /*!
-     * Specify a std::array of SVM pointers that the kernel may access in
+     * Specify a ::std::array of SVM pointers that the kernel may access in
      * addition to its arguments.
      */
     template<int ArrayLength>
-    cl_int setSVMPointers(const std::array<void*, ArrayLength> &pointerList)
+    cl_int setSVMPointers(const ::std::array<void*, ArrayLength> &pointerList)
     {
         return detail::errHandler(
             ::clSetKernelExecInfo(
@@ -5618,30 +5618,30 @@ public:
     }
     
     template<int index, int ArrayLength, class D, typename T0, typename T1, typename... Ts>
-    void setSVMPointersHelper(std::array<void*, ArrayLength> &pointerList, const pointer<T0, D> &t0, const pointer<T1, D> &t1, Ts & ... ts)
+    void setSVMPointersHelper(::std::array<void*, ArrayLength> &pointerList, const pointer<T0, D> &t0, const pointer<T1, D> &t1, Ts & ... ts)
     {
         pointerList[index] = static_cast<void*>(t0.get());
         setSVMPointersHelper<index + 1, ArrayLength>(pointerList, t1, ts...);
     }
 
     template<int index, int ArrayLength, typename T0, typename T1, typename... Ts>
-    typename std::enable_if<std::is_pointer<T0>::value, void>::type
-    setSVMPointersHelper(std::array<void*, ArrayLength> &pointerList, T0 t0, T1 t1, Ts... ts)
+    typename ::std::enable_if<::std::is_pointer<T0>::value, void>::type
+    setSVMPointersHelper(::std::array<void*, ArrayLength> &pointerList, T0 t0, T1 t1, Ts... ts)
     {
         pointerList[index] = static_cast<void*>(t0);
         setSVMPointersHelper<index + 1, ArrayLength>(pointerList, t1, ts...);
     }
 
     template<int index, int ArrayLength, typename T0, class D>
-    void setSVMPointersHelper(std::array<void*, ArrayLength> &pointerList, const pointer<T0, D> &t0)
+    void setSVMPointersHelper(::std::array<void*, ArrayLength> &pointerList, const pointer<T0, D> &t0)
     {
         pointerList[index] = static_cast<void*>(t0.get());
     }
 
 
     template<int index, int ArrayLength, typename T0>
-    typename std::enable_if<std::is_pointer<T0>::value, void>::type
-    setSVMPointersHelper(std::array<void*, ArrayLength> &pointerList, T0 t0)
+    typename ::std::enable_if<::std::is_pointer<T0>::value, void>::type
+    setSVMPointersHelper(::std::array<void*, ArrayLength> &pointerList, T0 t0)
     {
         pointerList[index] = static_cast<void*>(t0);
     }
@@ -5649,7 +5649,7 @@ public:
     template<typename T0, typename... Ts>
     cl_int setSVMPointers(const T0 &t0, Ts & ... ts)
     {
-        std::array<void*, 1 + sizeof...(Ts)> pointerList;
+        ::std::array<void*, 1 + sizeof...(Ts)> pointerList;
 
         setSVMPointersHelper<0, 1 + sizeof...(Ts)>(pointerList, t0, ts...);
         return detail::errHandler(
@@ -5705,8 +5705,8 @@ public:
     typedef vector<vector<unsigned char>> Binaries;
     typedef vector<string> Sources;
 #else // #if !defined(CL_HPP_ENABLE_PROGRAM_CONSTRUCTION_FROM_ARRAY_COMPATIBILITY)
-    typedef vector<std::pair<const void*, size_type> > Binaries;
-    typedef vector<std::pair<const char*, size_type> > Sources;
+    typedef vector<::std::pair<const void*, size_type> > Binaries;
+    typedef vector<::std::pair<const char*, size_type> > Sources;
 #endif // #if !defined(CL_HPP_ENABLE_PROGRAM_CONSTRUCTION_FROM_ARRAY_COMPATIBILITY)
     
     Program(
@@ -6138,7 +6138,7 @@ public:
             data);
 
         BuildLogType buildLog(0);
-        buildLog.push_back(std::make_pair(device, getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)));
+        buildLog.push_back(::std::make_pair(device, getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)));
         return detail::buildErrHandler(buildError, __BUILD_PROGRAM_ERR, buildLog);
     }
 
@@ -6228,13 +6228,13 @@ public:
      * On an error reading the info for any device, an empty vector of info will be returned.
      */
     template <cl_program_build_info name>
-    vector<std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, name>::param_type>>
+    vector<::std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, name>::param_type>>
         getBuildInfo(cl_int *err = nullptr) const
     {
         cl_int result = CL_SUCCESS;
 
         auto devs = getInfo<CL_PROGRAM_DEVICES>(&result);
-        vector<std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, name>::param_type>>
+        vector<::std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, name>::param_type>>
             devInfo;
 
         // If there was an initial error from getInfo return the error
@@ -6250,7 +6250,7 @@ public:
                 detail::cl_program_build_info, name>::param_type param;
             result = getBuildInfo(d, name, &param);
             devInfo.push_back(
-                std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, name>::param_type>
+                ::std::pair<cl::Device, typename detail::param_traits<detail::cl_program_build_info, name>::param_type>
                 (d, param));
             if (result != CL_SUCCESS) {
                 // On error, leave the loop and return the error code
@@ -6326,7 +6326,7 @@ public:
      *  Wraps clSetProgramSpecializationConstant().
      */
     template <typename T>
-    typename std::enable_if<!std::is_pointer<T>::value, cl_int>::type
+    typename ::std::enable_if<!::std::is_pointer<T>::value, cl_int>::type
         setSpecializationConstant(cl_uint index, const T &value)
     {
         return detail::errHandler(
@@ -6508,7 +6508,7 @@ inline Kernel::Kernel(const Program& program, const char* name, cl_int* err)
         // So we need to check for if the requested kernel name is first. Otherwise need to search for ";Foo.".
         const auto      start = [&]() -> string::size_type
             {
-                if (names.starts_with(std::string_view(pattern.begin() + 1, pattern.end())))
+                if (names.starts_with(::std::string_view(pattern.begin() + 1, pattern.end())))
                 {
                     return 0;
                 }
@@ -6578,7 +6578,7 @@ inline QueueProperties operator&(QueueProperties lhs, QueueProperties rhs)
 class CommandQueue : public detail::Wrapper<cl_command_queue>
 {
 private:
-    static std::once_flag default_initialized_;
+    static ::std::once_flag default_initialized_;
     static CommandQueue default_;
     static cl_int default_error_;
 
@@ -6624,7 +6624,7 @@ private:
     }
 
 #ifdef cl_khr_external_memory
-    static std::once_flag ext_memory_initialized_;
+    static ::std::once_flag ext_memory_initialized_;
 
     static void initMemoryExtension(const cl::Device& device) 
     {
@@ -7017,7 +7017,7 @@ public:
 
     static CommandQueue getDefault(cl_int * err = nullptr) 
     {
-        std::call_once(default_initialized_, makeDefault);
+        ::std::call_once(default_initialized_, makeDefault);
 #if CL_HPP_TARGET_OPENCL_VERSION >= 200
         detail::errHandler(default_error_, __CREATE_COMMAND_QUEUE_WITH_PROPERTIES_ERR);
 #else // CL_HPP_TARGET_OPENCL_VERSION >= 200
@@ -7038,7 +7038,7 @@ public:
      */
     static CommandQueue setDefault(const CommandQueue &default_queue)
     {
-        std::call_once(default_initialized_, makeDefaultProvided, std::cref(default_queue));
+        ::std::call_once(default_initialized_, makeDefaultProvided, ::std::cref(default_queue));
         detail::errHandler(default_error_);
         return default_;
     }
@@ -7569,9 +7569,9 @@ public:
      *     type is an unnormalized signed integer type.   
      */
     template <typename T>
-    typename std::enable_if<std::is_same<T, cl_float4>::value ||
-                            std::is_same<T, cl_int4  >::value ||
-                            std::is_same<T, cl_uint4 >::value,
+    typename ::std::enable_if<::std::is_same<T, cl_float4>::value ||
+                            ::std::is_same<T, cl_int4  >::value ||
+                            ::std::is_same<T, cl_uint4 >::value,
                             cl_int>::type 
      enqueueFillImage(
          const Image& image, 
@@ -7607,9 +7607,9 @@ public:
      *     type is an unnormalized signed integer type.
      */
     template <typename T>
-    typename std::enable_if<std::is_same<T, cl_float4>::value ||
-                            std::is_same<T, cl_int4  >::value ||
-                            std::is_same<T, cl_uint4 >::value, cl_int>::type
+    typename ::std::enable_if<::std::is_same<T, cl_float4>::value ||
+                            ::std::is_same<T, cl_int4  >::value ||
+                            ::std::is_same<T, cl_uint4 >::value, cl_int>::type
     enqueueFillImage(
         const Image& image,
         T fillColor,
@@ -8257,7 +8257,7 @@ public:
 
     cl_int enqueueNativeKernel(
         void (CL_CALLBACK *userFptr)(void *),
-        std::pair<void*, size_type> args,
+        ::std::pair<void*, size_type> args,
         const vector<Memory>* mem_objects = nullptr,
         const vector<const void*>* mem_locs = nullptr,
         const vector<Event>* events = nullptr,
@@ -8466,7 +8466,7 @@ typedef CL_API_ENTRY cl_int (CL_API_CALL *PFN_clEnqueueReleaseD3D10ObjectsKHR)(
         cl_int err = CL_INVALID_OPERATION;
         cl_event tmp;
 
-        std::call_once(ext_memory_initialized_, initMemoryExtension, this->getInfo<CL_QUEUE_DEVICE>());
+        ::std::call_once(ext_memory_initialized_, initMemoryExtension, this->getInfo<CL_QUEUE_DEVICE>());
 
         if (pfn_clEnqueueAcquireExternalMemObjectsKHR)
         {
@@ -8495,7 +8495,7 @@ typedef CL_API_ENTRY cl_int (CL_API_CALL *PFN_clEnqueueReleaseD3D10ObjectsKHR)(
         cl_int err = CL_INVALID_OPERATION;
         cl_event tmp;
 
-        std::call_once(ext_memory_initialized_, initMemoryExtension, this->getInfo<CL_QUEUE_DEVICE>());
+        ::std::call_once(ext_memory_initialized_, initMemoryExtension, this->getInfo<CL_QUEUE_DEVICE>());
 
         if (pfn_clEnqueueReleaseExternalMemObjectsKHR)
         {
@@ -8533,10 +8533,10 @@ typedef CL_API_ENTRY cl_int (CL_API_CALL *PFN_clEnqueueReleaseD3D10ObjectsKHR)(
 }; // CommandQueue
 
 #ifdef cl_khr_external_memory
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag CommandQueue::ext_memory_initialized_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag CommandQueue::ext_memory_initialized_;
 #endif
 
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag CommandQueue::default_initialized_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag CommandQueue::default_initialized_;
 CL_HPP_DEFINE_STATIC_MEMBER_ CommandQueue CommandQueue::default_;
 CL_HPP_DEFINE_STATIC_MEMBER_ cl_int CommandQueue::default_error_ = CL_SUCCESS;
 
@@ -8818,7 +8818,7 @@ Buffer::Buffer(
     bool useHostPtr,
     cl_int* err)
 {
-    typedef typename std::iterator_traits<IteratorType>::value_type DataType;
+    typedef typename ::std::iterator_traits<IteratorType>::value_type DataType;
     cl_int error;
 
     cl_mem_flags flags = 0;
@@ -8869,7 +8869,7 @@ Buffer::Buffer(
     bool useHostPtr,
     cl_int* err)
 {
-    typedef typename std::iterator_traits<IteratorType>::value_type DataType;
+    typedef typename ::std::iterator_traits<IteratorType>::value_type DataType;
     cl_int error;
 
     cl_mem_flags flags = 0;
@@ -9206,7 +9206,7 @@ inline cl_int copy( const cl::Buffer &buffer, IteratorType startIterator, Iterat
 template< typename IteratorType >
 inline cl_int copy( const CommandQueue &queue, IteratorType startIterator, IteratorType endIterator, cl::Buffer &buffer )
 {
-    typedef typename std::iterator_traits<IteratorType>::value_type DataType;
+    typedef typename ::std::iterator_traits<IteratorType>::value_type DataType;
     cl_int error;
     
     size_type length = endIterator-startIterator;
@@ -9219,13 +9219,13 @@ inline cl_int copy( const CommandQueue &queue, IteratorType startIterator, Itera
         return error;
     }
 #if defined(_MSC_VER)
-    std::copy(
+    ::std::copy(
         startIterator, 
         endIterator, 
         stdext::checked_array_iterator<DataType*>(
             pointer, length));
 #else
-    std::copy(startIterator, endIterator, pointer);
+    ::std::copy(startIterator, endIterator, pointer);
 #endif
     Event endEvent;
     error = queue.enqueueUnmapMemObject(buffer, pointer, 0, &endEvent);
@@ -9245,7 +9245,7 @@ inline cl_int copy( const CommandQueue &queue, IteratorType startIterator, Itera
 template< typename IteratorType >
 inline cl_int copy( const CommandQueue &queue, const cl::Buffer &buffer, IteratorType startIterator, IteratorType endIterator )
 {
-    typedef typename std::iterator_traits<IteratorType>::value_type DataType;
+    typedef typename ::std::iterator_traits<IteratorType>::value_type DataType;
     cl_int error;
         
     size_type length = endIterator-startIterator;
@@ -9257,7 +9257,7 @@ inline cl_int copy( const CommandQueue &queue, const cl::Buffer &buffer, Iterato
     if( error != CL_SUCCESS ) {
         return error;
     }
-    std::copy(pointer, pointer + length, startIterator);
+    ::std::copy(pointer, pointer + length, startIterator);
     Event endEvent;
     error = queue.enqueueUnmapMemObject(buffer, pointer, 0, &endEvent);
     // if exceptions enabled, enqueueUnmapMemObject will throw
@@ -9956,7 +9956,7 @@ private:
     void setArgs(T0&& t0, T1s&&... t1s)
     {
         kernel_.setArg(index, t0);
-        setArgs<index + 1, T1s...>(std::forward<T1s>(t1s)...);
+        setArgs<index + 1, T1s...>(::std::forward<T1s>(t1s)...);
     }
 
     template<int index, typename T0>
@@ -9995,7 +9995,7 @@ public:
         Ts... ts)
     {
         Event event;
-        setArgs<0>(std::forward<Ts>(ts)...);
+        setArgs<0>(::std::forward<Ts>(ts)...);
         
         args.queue_.enqueueNDRangeKernel(
             kernel_,
@@ -10020,7 +10020,7 @@ public:
         cl_int &error)
     {
         Event event;
-        setArgs<0>(std::forward<Ts>(ts)...);
+        setArgs<0>(::std::forward<Ts>(ts)...);
 
         error = args.queue_.enqueueNDRangeKernel(
             kernel_,
@@ -10197,8 +10197,8 @@ public:
     typedef const value_type* const_pointer;
     typedef value_type& reference;
     typedef const value_type& const_reference;
-    typedef std::size_t size_type;
-    typedef std::ptrdiff_t difference_type;
+    typedef ::std::size_t size_type;
+    typedef ::std::ptrdiff_t difference_type;
 
     template<typename U>
     struct rebind
@@ -10237,12 +10237,12 @@ public:
 
     pointer address(reference r) CL_HPP_NOEXCEPT_
     {
-        return std::addressof(r);
+        return ::std::addressof(r);
     }
 
     const_pointer address(const_reference r) CL_HPP_NOEXCEPT_
     {
-        return std::addressof(r);
+        return ::std::addressof(r);
     }
 
     /**
@@ -10266,7 +10266,7 @@ public:
             voidPointer);
 #if defined(CL_HPP_ENABLE_EXCEPTIONS)
         if (!retValue) {
-            std::bad_alloc excep;
+            ::std::bad_alloc excep;
             throw excep;
         }
 #endif // #if defined(CL_HPP_ENABLE_EXCEPTIONS)
@@ -10275,7 +10275,7 @@ public:
         if (!(SVMTrait::getSVMMemFlags() & CL_MEM_SVM_FINE_GRAIN_BUFFER)) {
             cl_int err = queue_.enqueueMapSVM(retValue, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, size*sizeof(T));
             if (err != CL_SUCCESS) {
-                std::bad_alloc excep;
+                ::std::bad_alloc excep;
                 throw excep;
             }
         }
@@ -10295,10 +10295,10 @@ public:
      */
     size_type max_size() const CL_HPP_NOEXCEPT_
     {
-        size_type maxSize = std::numeric_limits<size_type>::max() / sizeof(T);
+        size_type maxSize = ::std::numeric_limits<size_type>::max() / sizeof(T);
 
         for (const Device &d : queue_.getInfo<CL_QUEUE_CONTEXT>().getInfo<CL_CONTEXT_DEVICES>()) {
-            maxSize = std::min(
+            maxSize = ::std::min(
                 maxSize, 
                 static_cast<size_type>(d.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>()));
         }
@@ -10360,7 +10360,7 @@ namespace detail
         size_type copies_;
 
     public:
-        typedef typename std::allocator_traits<Alloc>::pointer pointer;
+        typedef typename ::std::allocator_traits<Alloc>::pointer pointer;
 
         Deleter(const Alloc &alloc, size_type copies) : alloc_{ alloc }, copies_{ copies }
         {
@@ -10368,14 +10368,14 @@ namespace detail
 
         void operator()(pointer ptr) const {
             Alloc tmpAlloc{ alloc_ };
-            std::allocator_traits<Alloc>::destroy(tmpAlloc, std::addressof(*ptr));
-            std::allocator_traits<Alloc>::deallocate(tmpAlloc, ptr, copies_);
+            ::std::allocator_traits<Alloc>::destroy(tmpAlloc, ::std::addressof(*ptr));
+            ::std::allocator_traits<Alloc>::deallocate(tmpAlloc, ptr, copies_);
         }
     };
 } // namespace detail
 
 /**
- * Allocation operation compatible with std::allocate_ptr.
+ * Allocation operation compatible with ::std::allocate_ptr.
  * Creates a unique_ptr<T> by default.
  * This requirement is to ensure that the control block is not
  * allocated in memory inaccessible to the host.
@@ -10389,22 +10389,22 @@ cl::pointer<T, detail::Deleter<Alloc>> allocate_pointer(const Alloc &alloc_, Arg
     // Ensure that creation of the management block and the
     // object are dealt with separately such that we only provide a deleter
 
-    T* tmp = std::allocator_traits<Alloc>::allocate(alloc, copies);
+    T* tmp = ::std::allocator_traits<Alloc>::allocate(alloc, copies);
     if (!tmp) {
-        std::bad_alloc excep;
+        ::std::bad_alloc excep;
         throw excep;
     }
     try {
-        std::allocator_traits<Alloc>::construct(
+        ::std::allocator_traits<Alloc>::construct(
             alloc,
-            std::addressof(*tmp),
-            std::forward<Args>(args)...);
+            ::std::addressof(*tmp),
+            ::std::forward<Args>(args)...);
 
         return cl::pointer<T, detail::Deleter<Alloc>>(tmp, detail::Deleter<Alloc>{alloc, copies});
     }
-    catch (std::bad_alloc&)
+    catch (::std::bad_alloc&)
     {
-        std::allocator_traits<Alloc>::deallocate(alloc, tmp, copies);
+        ::std::allocator_traits<Alloc>::deallocate(alloc, tmp, copies);
         throw;
     }
 }
@@ -10456,7 +10456,7 @@ public:
         cl_int *err = nullptr) 
     {
         /* initialization of addresses to extension functions (it is done only once) */
-        std::call_once(ext_init_, initExtensions, context);
+        ::std::call_once(ext_init_, initExtensions, context);
 
         cl_int error = CL_INVALID_OPERATION;
 
@@ -10528,7 +10528,7 @@ public:
     }
 
 private:
-    static std::once_flag ext_init_;
+    static ::std::once_flag ext_init_;
 
     static void initExtensions(const Context& context)
     {
@@ -10562,7 +10562,7 @@ private:
 
 };
 
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag Semaphore::ext_init_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag Semaphore::ext_init_;
 
 inline cl_int CommandQueue::enqueueWaitSemaphores(
     const vector<Semaphore> &sema_objects,
@@ -10641,7 +10641,7 @@ public:
         };
 
         /* initialization of addresses to extension functions (it is done only once) */
-        std::call_once(ext_init_, [&] { initExtensions(queues[0].getInfo<CL_QUEUE_DEVICE>()); });
+        ::std::call_once(ext_init_, [&] { initExtensions(queues[0].getInfo<CL_QUEUE_DEVICE>()); });
         cl_int error = CL_INVALID_OPERATION;
 
         static_assert(sizeof(cl::CommandQueue) == sizeof(cl_command_queue),
@@ -11055,7 +11055,7 @@ public:
 #endif /* cl_khr_command_buffer_mutable_dispatch */
 
 private:
-    static std::once_flag ext_init_;
+    static ::std::once_flag ext_init_;
 
     static void initExtensions(const cl::Device& device)
     {
@@ -11127,7 +11127,7 @@ private:
     }
 }; // CommandBufferKhr
 
-CL_HPP_DEFINE_STATIC_MEMBER_ std::once_flag CommandBufferKhr::ext_init_;
+CL_HPP_DEFINE_STATIC_MEMBER_ ::std::once_flag CommandBufferKhr::ext_init_;
 
 #if defined(cl_khr_command_buffer_mutable_dispatch)
 /*! \class MutableCommandKhr
